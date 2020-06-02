@@ -1,0 +1,51 @@
+#!/bin/bash
+#------------------------------------------------
+# Update for the launcher-gpu version
+# Si Liu
+# Jan 31, 2020
+
+# On host setup script to run multiple tasks/host
+#
+# 1/21/2011 - l.wilson
+#
+# Texas Advanced Computing Center
+# The University of Texas at Austin
+#------------------------------------------------
+
+if [ "$LAUNCHER_BIND" == "1" ]
+then
+  if [ "$LAUNCHER_BIND_HT" == "1" ]
+  then
+    bind_obj="pu"
+  else
+    bind_obj="core"
+  fi
+
+  for i in `seq 0 $(($LAUNCHER_PPN - 1))`
+  do
+    spu=$(($i * $LAUNCHER_PUPT))
+    epu=$(($spu + $LAUNCHER_PUPT - 1))
+    #Start the launcher script for every process to be spawned on this host and give it a unique task id
+    env `$LAUNCHER_DIR/pass_env` LAUNCHER_HWLOC_CMD="hwloc-bind ${bind_obj}:$spu-$epu" GPU_SET="CUDA_VISIBLE_DEVICES=$i"   LAUNCHER_TSK_ID=$(($LAUNCHER_PPN * $LAUNCHER_HOST_ID + $i)) $LAUNCHER_DIR/launcher &
+  done
+else
+  for i in `seq 0 $(($LAUNCHER_PPN - 1))`
+  do
+    #Start the launcher script for every process to be spawned on this host and give it a unique task id
+    env `$LAUNCHER_DIR/pass_env` LAUNCHER_TSK_ID=$(($LAUNCHER_PPN * $LAUNCHER_HOST_ID + $i)) $LAUNCHER_DIR/launcher &
+  done
+fi
+
+
+if [ ! "x$LAUNCHER_NPHI" == "x" ]
+then
+  #Start the launcher on the Intel Xeon Phi cards in this box
+  for j in `seq 0 $(($LAUNCHER_NPHI - 1))`
+  do
+    ssh mic$j "env `$LAUNCHER_DIR/pass_env` 
+               LAUNCHER_PHI_ID=$(($LAUNCHER_HOST_ID * $LAUNCHER_NPHI + $j)) 
+               $LAUNCHER_DIR/init_launcher_phi $*" &    
+  done
+fi
+
+wait
